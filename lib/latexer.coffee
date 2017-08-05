@@ -11,8 +11,7 @@ module.exports = Latexer =
       default: ["title", "author"]
       items:
         type: "string"
-
-    directories_to_search_bib_in:
+    special_bib_file:
       type: "array"
       default: []
       items:
@@ -29,12 +28,6 @@ module.exports = Latexer =
     autocomplete_citations:
       type: "boolean"
       default: true
-
-    autocomplete_pandoc_markdown_citations:
-      description: "Example: [see @doe99, pp. 33-35; also @smith04, chap. 1]"
-      type: "boolean"
-      default: true
-
 
 
   activate: ->

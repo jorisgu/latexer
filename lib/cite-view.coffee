@@ -2,9 +2,7 @@
 Citation = require './citation'
 FindLabels = require './find-labels'
 fs = require 'fs-plus'
-_ = require 'lodash'
 pathModule = require 'path'
-pandoc = require './pandoc-citations'
 
 module.exports =
 class CiteView extends SelectListView
@@ -32,10 +30,7 @@ class CiteView extends SelectListView
     "filterKey"
 
   viewForItem: ({title, key, author}) ->
-    """
-    <li><span style='display:block;'>#{title}</span>
-    <span style='display:block;font-size:xx-small;'>#{author}</span></li>
-    """
+    "<li><span style='display:block;'>#{title}</span><span style='display:block;font-size:xx-small;'>#{author}</span></li>"
 
   hide: ->
     @panel?.hide()
@@ -51,7 +46,7 @@ class CiteView extends SelectListView
   getCitations: ->
     cites = []
     bibFiles = @getBibFiles()
-    for bibFile in _.uniq(bibFiles)
+    for bibFile in bibFiles
       cites = cites.concat(@getCitationsFromPath(bibFile))
     cites
 
@@ -66,25 +61,20 @@ class CiteView extends SelectListView
     if bibFiles == null or bibFiles.length == 0
       texRootRex = /%(\s+)?!TEX root(\s+)?=(\s+)?(.+)/g
       while(match = texRootRex.exec(@editor.getText()))
-        absolutFilePath =
-          FindLabels.getAbsolutePath(activePaneItemPath,match[4])
+        absolutFilePath = FindLabels.getAbsolutePath(activePaneItemPath,match[4])
         basePath = pathModule.dirname(absolutFilePath)
         try
           text = fs.readFileSync(absolutFilePath).toString()
-          #todo append basePath to each BibFiles in
-          bibFiles = @getBibFileFromText(text)
+          bibFiles = @getBibFileFromText(text) #todo append basePath to each BibFiles in
           if bibFiles != null and bibFiles.length != 0
             break
         catch error
-          atom.notifications.addError('could not load content '+ match[4],
-                                        {dismissable: true })
+          atom.notifications.addError('could not load content '+ match[4], { dismissable: true })
           console.log(error)
     result = []
     basePath = basePath + pathModule.sep
     for bfpath in bibFiles
       result = result.concat(FindLabels.getAbsolutePath(basePath, bfpath) )
-      for bibDir in atom.config.get("latexer.directories_to_search_bib_in")
-        result = result.concat(FindLabels.getAbsolutePath(bibDir, bfpath) )
     result
 
   getBibFileFromText: (text) ->
@@ -96,10 +86,8 @@ class CiteView extends SelectListView
         if not /\.bib$/.test(found)
           found += ".bib"
         bibFiles = bibFiles.concat(found)
-    yaml = pandoc.extractYAMLmetadata(text)
-    yamlBibFiles = pandoc.getBibfilesFromYAML(yaml)
-    if yamlBibFiles is not null
-      bibFiles = bibFiles.concat(yamlBibFiles)
+    for key in atom.config.get("latexer.special_bib_file")
+      bibFiles = bibFiles.concat(key)
     bibFiles
 
   getCitationsFromPath: (path) ->
@@ -107,8 +95,8 @@ class CiteView extends SelectListView
     text = null
     try text = fs.readFileSync(path).toString()
     catch error
-      console.log(error)
-      return []
+       console.log(error)
+       return []
     return [] unless text?
     text = text.replace(/(\r\n|\n|\r)/gm,"")
     textSplit = text.split("@")
@@ -120,9 +108,5 @@ class CiteView extends SelectListView
       filter = ""
       for key in atom.config.get("latexer.parameters_to_search_citations_by")
         filter += ct.get(key) + " "
-      cites.push({
-        title: ct.get("title"),
-        key: ct.get("key"),
-        author: ct.get("author"),
-        filterKey: filter})
+      cites.push({title: ct.get("title"), key: ct.get("key"), author: ct.get("author"), filterKey: filter})
     cites
