@@ -1,14 +1,13 @@
 {CompositeDisposable} = require 'atom'
 LabelView = require './label-view'
 CiteView = require './cite-view'
-pandoc = require './pandoc-citations'
 
 module.exports =
   class LatexerHook
     beginRex: /\\begin{([^}]+)}/
     mathRex: /(\\+)\[/
-    refRex: /\\(\w*ref({|{[^}]+,)|[cC](page)?refrange({[^,}]*})?{)$/
-    citeRex: /\\\w*(cite|citet|citep|citet\*|citep\*)(\[[^\]]+\])?({|{[^}]+,)$/
+    refRex: /\\\w*ref({|{[^}]+,)$/
+    citeRex: /\\(cite|textcite|onlinecite|citet|citep|citet\*|citep\*)(\[[^\]]+\])?({|{[^}]+,)$/
     constructor: (@editor) ->
       @disposables = new CompositeDisposable
       @disposables.add @editor.onDidChangeTitle => @subscribeBuffer()
@@ -31,13 +30,7 @@ module.exports =
       @unsubscribeBuffer()
       return unless @editor?
       title = @editor?.getTitle()
-
-      return unless title? and (
-        title.match(/\.tex$/) or
-        title.match(/\.md$/) or # also match Markdown
-        title.match(/\.Rmd$/) or  #   and RMarkdown files
-        title.match(/\.[rs]nw$/) # Knitr/Sweeve
-      )
+      return unless title? and title.match(/\.tex$/)
       @buffer = @editor.getBuffer()
       @disposableBuffer = @buffer.onDidStopChanging => @editorHook()
 
@@ -45,19 +38,12 @@ module.exports =
       @disposableBuffer?.dispose()
       @buffer = null
 
-    refCiteCheck: (editor, refOpt, citeOpt, pandocCiteOpt) ->
-      cursor = editor.getCursorBufferPosition()
-      line = editor.getTextInBufferRange(
-        [
-          [cursor.row, 0],
-          [cursor.row, cursor.column]
-        ]
-      )
+    refCiteCheck: (editor, refOpt, citeOpt)->
+      pos = editor.getCursorBufferPosition().toArray()
+      line = editor.getTextInBufferRange([[pos[0], 0], pos])
       if refOpt and (match = line.match(@refRex))
         @lv.show(editor)
       if citeOpt and (match = line.match(@citeRex))
-        @cv.show(editor)
-      if pandocCiteOpt and pandoc.isPandocStyleCitation(line)
         @cv.show(editor)
 
     environmentCheck: (editor)->
@@ -67,10 +53,8 @@ module.exports =
       if (match = @beginRex.exec(previousLine))
         beginText = "\\begin{#{match[1]}}"
         endText = "\\end{#{match[1]}}"
-        beginTextRegify = beginText.replace(/([()[{*+.$^\\|?])/g, "\\$1")
-        beginTextRex = new RegExp beginTextRegify, "gm"
-        endTextRegify = endText.replace(/([()[{*+.$^\\|?])/g, "\\$1")
-        endTextRex = new RegExp endTextRegify, "gm"
+        beginTextRex = new RegExp beginText.replace(/([()[{*+.$^\\|?])/g, "\\$1"), "gm"
+        endTextRex = new RegExp endText.replace(/([()[{*+.$^\\|?])/g, "\\$1"), "gm"
       else if (match = @mathRex.exec(previousLine)) and match[1].length % 2
         beginText = "\\["
         endText = "\\]"
@@ -79,16 +63,10 @@ module.exports =
       else
         return
       lineCount = editor.getLineCount()
-      preText= editor.getTextInBufferRange([[0,0], [pos[0],0]])
-                      .replace /%.+$/gm,""
-      remainingText = editor.getTextInBufferRange([[pos[0],0],[lineCount+1,0]])
-                            .replace /%.+$/gm,""
-      open = (preText.match(beginTextRex)||[]).length
-      closed = (preText.match(endTextRex)||[]).length
-      balanceBefore = open - closed
-      open = (remainingText.match(beginTextRex)||[]).length
-      closed = (remainingText.match(endTextRex)||[]).length
-      balanceAfter = open - closed
+      preText= editor.getTextInBufferRange([[0,0], [pos[0],0]]).replace /%.+$/gm,""
+      remainingText = editor.getTextInBufferRange([[pos[0],0],[lineCount+1,0]]).replace /%.+$/gm,""
+      balanceBefore = (preText.match(beginTextRex)||[]).length - (preText.match(endTextRex)||[]).length
+      balanceAfter = (remainingText.match(beginTextRex)||[]).length - (remainingText.match(endTextRex)||[]).length
       return if balanceBefore + balanceAfter < 1
       posBefore = editor.getCursorBufferPosition()
       editor.insertText endText
@@ -100,6 +78,5 @@ module.exports =
       envOpt = atom.config.get "latexer.autocomplete_environments"
       refOpt = atom.config.get "latexer.autocomplete_references"
       citeOpt = atom.config.get "latexer.autocomplete_citations"
-      pOpt = atom.config.get "latexer.autocomplete_pandoc_markdown_citations"
-      @refCiteCheck(editor, refOpt, citeOpt, pOpt) if refOpt or citeOpt or pOpt
+      @refCiteCheck(editor, refOpt, citeOpt) if refOpt or citeOpt
       @environmentCheck(editor) if envOpt
